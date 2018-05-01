@@ -1,14 +1,24 @@
 package com.lightbend.akka.sample
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Terminated}
-import com.lightbend.akka.sample.DeviceGroup.{ReplyDeviceList, RequestDeviceList}
+import com.lightbend.akka.sample.DeviceGroup.{ReplyDeviceList, RequestAllTemperatures, RequestDeviceList}
 import com.lightbend.akka.sample.DeviceManager.RequestTrackDevice
+import scala.concurrent.duration._
 
 object DeviceGroup {
   def props(groupId: String): Props = Props(new DeviceGroup(groupId))
 
   final case class RequestDeviceList(requestId: Long)
   final case class ReplyDeviceList(requestId: Long, ids: Set[String])
+
+  final case class RequestAllTemperatures(requestId: Long)
+  final case class RespondAllTemperatures(requestId: Long, temperatures: Map[String, TemperatureReading])
+
+  sealed trait TemperatureReading
+  final case class Temperature(value: Double) extends TemperatureReading
+  case object TemperatureNotAvailable extends TemperatureReading
+  case object DeviceNotAvailable extends TemperatureReading
+  case object DeviceTimedOut extends TemperatureReading
 }
 
 class DeviceGroup(groupId: String) extends Actor with ActorLogging {
@@ -50,5 +60,13 @@ class DeviceGroup(groupId: String) extends Actor with ActorLogging {
 
     case DeviceManager.RequestTrackGroup(`groupId`)=>
       sender() ! DeviceManager.GroupRegistered
+
+    case RequestAllTemperatures(requestId) ⇒
+      context.actorOf(DeviceGroupQuery.props(
+        actorToDeviceId = actorToDeviceId,
+        requestId = requestId,
+        requester = sender(),
+        3.seconds
+      ))
   }
 }
